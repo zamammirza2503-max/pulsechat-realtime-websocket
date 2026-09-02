@@ -1,6 +1,6 @@
 # PulseChat — Real-Time Chat Portfolio Project
 
-Original TypeScript rebuild inspired by the architecture and learning goals of the freeCodeCamp article by Flavio Copes. It keeps React + Redux + Redux-Saga + WebSockets, then extends the project with authentication, PostgreSQL persistence, rooms, optimistic UI, typing indicators, presence, read receipts, reconnect logic, validation, Docker and CI.
+Original TypeScript rebuild inspired by the architecture. It keeps React + Redux + Redux-Saga + WebSockets, then extends the project with authentication, PostgreSQL persistence, rooms, optimistic UI, typing indicators, presence, read receipts, reconnect logic, validation, Docker and CI.
 
 ## Stack
 - React 19 + TypeScript + Vite
