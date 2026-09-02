@@ -1,11 +1,497 @@
-import {configureStore,createSlice,type PayloadAction} from "@reduxjs/toolkit";import createSagaMiddleware from "redux-saga";import {all,call,put,select,takeEvery} from "redux-saga/effects";
-const API="http://localhost:4000";type User={id:string;username:string};type Message={id:string;content:string;createdAt:string;userId:string;roomId:string;user:User;clientId?:string;optimistic?:boolean};
-const auth=createSlice({name:"auth",initialState:{token:null as string|null,user:null as User|null,error:null as string|null},reducers:{loggedIn:(s,a:PayloadAction<{token:string;user:User}>)=>{s.token=a.payload.token;s.user=a.payload.user;s.error=null},loggedOut:s=>{s.token=null;s.user=null},error:(s,a:PayloadAction<string>)=>{s.error=a.payload}}});
-const chat=createSlice({name:"chat",initialState:{rooms:[] as {id:string;name:string}[],active:null as string|null,messages:[] as Message[],status:"offline",typing:{} as Record<string,string>,online:[] as string[]},reducers:{roomsLoaded:(s,a)=>{s.rooms=a.payload},roomSelected:(s,a)=>{s.active=a.payload;s.messages=[]},messagesLoaded:(s,a)=>{s.messages=a.payload},status:(s,a)=>{s.status=a.payload},messageOptimistic:(s,a)=>{s.messages.push(a.payload)},messageReceived:(s,a)=>{const x=s.messages.find(m=>m.clientId===a.payload.clientId);if(x)Object.assign(x,a.payload);else if(!s.messages.some(m=>m.id===a.payload.id))s.messages.push(a.payload)},typing:(s,a)=>{if(a.payload.isTyping)s.typing[a.payload.userId]=a.payload.username;else delete s.typing[a.payload.userId]},presence:(s,a)=>{const set=new Set(s.online);a.payload.status==="online"?set.add(a.payload.username):set.delete(a.payload.username);s.online=[...set]}}});
-const sagaMiddleware=createSagaMiddleware();export const store=configureStore({reducer:{auth:auth.reducer,chat:chat.reducer},middleware:g=>g({serializableCheck:false}).concat(sagaMiddleware)});type Root=ReturnType<typeof store.getState>;let ws:WebSocket|null=null;
-function* login(a:any){try{const r:Response=yield call(fetch,`${API}/api/auth/${a.type}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(a.payload)});const d=yield r.json();if(!r.ok)throw Error(d.error);yield put(auth.actions.loggedIn(d))}catch(e:any){yield put(auth.actions.error(e.message))}}
-function* rooms(){const token=yield select((s:Root)=>s.auth.token);const r:Response=yield call(fetch,`${API}/api/rooms`,{headers:{Authorization:`Bearer ${token}`}});yield put(chat.actions.roomsLoaded(yield r.json()))}
-function* selectRoom(a:any){const token=yield select((s:Root)=>s.auth.token);const r:Response=yield call(fetch,`${API}/api/rooms/${a.payload}/messages`,{headers:{Authorization:`Bearer ${token}`}});yield put(chat.actions.messagesLoaded(yield r.json()));yield put({type:"connect"})}
-function connect(){const token=store.getState().auth.token,room=store.getState().chat.active;if(!token||!room)return;ws?.close();ws=new WebSocket(`ws://localhost:4000/ws?token=${token}`);ws.onopen=()=>{ws?.send(JSON.stringify({type:"JOIN_ROOM",roomId:room}));store.dispatch(chat.actions.status("connected"))};ws.onmessage=e=>{const p=JSON.parse(e.data);if(p.type==="MESSAGE")store.dispatch(chat.actions.messageReceived(p.message));if(p.type==="TYPING")store.dispatch(chat.actions.typing(p));if(p.type==="PRESENCE")store.dispatch(chat.actions.presence(p))};ws.onclose=()=>{store.dispatch(chat.actions.status("reconnecting"));setTimeout(connect,1500)}}
-function send(a:any){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:"MESSAGE_SEND",roomId:a.payload.roomId,content:a.payload.content,clientId:a.payload.clientId}))}
-function* root(){yield all([takeEvery("loginRequested",login),takeEvery("registerRequested",login),takeEvery("roomsRequested",rooms),takeEvery(chat.actions.roomSelected.type,selectRoom),takeEvery("connect",connect),takeEvery("sendMessage",send)])}sagaMiddleware.run(root);export const actions={...auth.actions,...chat.actions,loginRequested:(p:any)=>({type:"loginRequested",payload:p}),registerRequested:(p:any)=>({type:"registerRequested",payload:p}),roomsRequested:()=>({type:"roomsRequested"}),sendMessage:(p:any)=>({type:"sendMessage",payload:p})};export type {Root,Message};
+import {
+    configureStore,
+    createSlice,
+    type PayloadAction,
+} from "@reduxjs/toolkit";
+
+import createSagaMiddleware from "redux-saga";
+
+import {
+    all,
+    call,
+    put,
+    select,
+    takeEvery,
+} from "redux-saga/effects";
+
+
+// ============================================================
+// API
+// ============================================================
+
+const API = "http://localhost:4000";
+
+
+// ============================================================
+// Types
+// ============================================================
+
+type User = {
+    id: string;
+    username: string;
+};
+
+export type Message = {
+    id: string;
+    content: string;
+    createdAt: string;
+    userId: string;
+    roomId: string;
+    user: User;
+    clientId?: string;
+    optimistic?: boolean;
+};
+
+
+// ============================================================
+// Auth Slice
+// ============================================================
+
+const auth = createSlice({
+    name: "auth",
+
+    initialState: {
+        token: null as string | null,
+        user: null as User | null,
+        error: null as string | null,
+    },
+
+    reducers: {
+        loggedIn: (
+            state,
+            action: PayloadAction<{
+                token: string;
+                user: User;
+            }>
+        ) => {
+            state.token = action.payload.token;
+            state.user = action.payload.user;
+            state.error = null;
+        },
+
+        loggedOut: (state) => {
+            state.token = null;
+            state.user = null;
+        },
+
+        error: (
+            state,
+            action: PayloadAction<string>
+        ) => {
+            state.error = action.payload;
+        },
+    },
+});
+
+
+// ============================================================
+// Chat Slice
+// ============================================================
+
+const chat = createSlice({
+    name: "chat",
+
+    initialState: {
+        rooms: [] as {
+            id: string;
+            name: string;
+        }[],
+
+        active: null as string | null,
+
+        messages: [] as Message[],
+
+        status: "offline",
+
+        typing: {} as Record<string, string>,
+
+        online: [] as string[],
+    },
+
+    reducers: {
+        roomsLoaded: (state, action) => {
+            state.rooms = action.payload;
+        },
+
+        roomSelected: (state, action) => {
+            state.active = action.payload;
+            state.messages = [];
+        },
+
+        messagesLoaded: (state, action) => {
+            state.messages = action.payload;
+        },
+
+        status: (state, action) => {
+            state.status = action.payload;
+        },
+
+        messageOptimistic: (state, action) => {
+            state.messages.push(action.payload);
+        },
+
+        messageReceived: (state, action) => {
+            const existingMessage = state.messages.find(
+                (message) =>
+                    message.clientId === action.payload.clientId
+            );
+
+            if (existingMessage) {
+                Object.assign(
+                    existingMessage,
+                    action.payload
+                );
+            } else if (
+                !state.messages.some(
+                    (message) =>
+                        message.id === action.payload.id
+                )
+            ) {
+                state.messages.push(action.payload);
+            }
+        },
+
+        typing: (state, action) => {
+            if (action.payload.isTyping) {
+                state.typing[action.payload.userId] =
+                    action.payload.username;
+            } else {
+                delete state.typing[action.payload.userId];
+            }
+        },
+
+        presence: (state, action) => {
+            const users = new Set(state.online);
+
+            if (action.payload.status === "online") {
+                users.add(action.payload.username);
+            } else {
+                users.delete(action.payload.username);
+            }
+
+            state.online = [...users];
+        },
+    },
+});
+
+
+// ============================================================
+// Saga Middleware
+// ============================================================
+
+const sagaMiddleware = createSagaMiddleware();
+
+
+// ============================================================
+// Redux Store
+// ============================================================
+
+export const store = configureStore({
+    reducer: {
+        auth: auth.reducer,
+        chat: chat.reducer,
+    },
+
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware({
+            serializableCheck: false,
+        }).concat(sagaMiddleware),
+});
+
+
+// ============================================================
+// Root State
+// ============================================================
+
+export type Root = ReturnType<typeof store.getState>;
+
+
+// ============================================================
+// WebSocket
+// ============================================================
+
+let ws: WebSocket | null = null;
+
+
+// ============================================================
+// Login / Register Saga
+// ============================================================
+
+function* login(action: any): Generator {
+    try {
+        const response: Response = yield call(
+            fetch,
+            `${API}/api/auth/${action.type}`,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                },
+
+                body: JSON.stringify(action.payload),
+            }
+        );
+
+        const data = yield response.json();
+
+        if (!response.ok) {
+            throw Error(data.error);
+        }
+
+        yield put(
+            auth.actions.loggedIn(data)
+        );
+    } catch (error: any) {
+        yield put(
+            auth.actions.error(error.message)
+        );
+    }
+}
+
+
+// ============================================================
+// Load Rooms Saga
+// ============================================================
+
+function* rooms(): Generator {
+    const token = yield select(
+        (state: Root) => state.auth.token
+    );
+
+    const response: Response = yield call(
+        fetch,
+        `${API}/api/rooms`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        }
+    );
+
+    const data = yield response.json();
+
+    yield put(
+        chat.actions.roomsLoaded(data)
+    );
+}
+
+
+// ============================================================
+// Select Room Saga
+// ============================================================
+
+function* selectRoom(action: any): Generator {
+    const token = yield select(
+        (state: Root) => state.auth.token
+    );
+
+    const response: Response = yield call(
+        fetch,
+        `${API}/api/rooms/${action.payload}/messages`,
+        {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+        }
+    );
+
+    const data = yield response.json();
+
+    yield put(
+        chat.actions.messagesLoaded(data)
+    );
+
+    yield put({
+        type: "connect",
+    });
+}
+
+
+// ============================================================
+// WebSocket Connection
+// ============================================================
+
+function connect(): void {
+    const token = store.getState().auth.token;
+
+    const room = store.getState().chat.active;
+
+    if (!token || !room) {
+        return;
+    }
+
+    // Close previous connection
+    ws?.close();
+
+    // Create WebSocket connection
+    ws = new WebSocket(
+        `ws://localhost:4000/ws?token=${token}`
+    );
+
+
+    // --------------------------------------------------------
+    // WebSocket opened
+    // --------------------------------------------------------
+
+    ws.onopen = () => {
+        ws?.send(
+            JSON.stringify({
+                type: "JOIN_ROOM",
+                roomId: room,
+            })
+        );
+
+        store.dispatch(
+            chat.actions.status("connected")
+        );
+    };
+
+
+    // --------------------------------------------------------
+    // WebSocket message received
+    // --------------------------------------------------------
+
+    ws.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+
+
+        // New message
+        if (payload.type === "MESSAGE") {
+            store.dispatch(
+                chat.actions.messageReceived(
+                    payload.message
+                )
+            );
+        }
+
+
+        // Typing notification
+        if (payload.type === "TYPING") {
+            store.dispatch(
+                chat.actions.typing(payload)
+            );
+        }
+
+
+        // Online / offline presence
+        if (payload.type === "PRESENCE") {
+            store.dispatch(
+                chat.actions.presence(payload)
+            );
+        }
+    };
+
+
+    // --------------------------------------------------------
+    // WebSocket closed
+    // --------------------------------------------------------
+
+    ws.onclose = () => {
+        store.dispatch(
+            chat.actions.status("reconnecting")
+        );
+
+        setTimeout(connect, 1500);
+    };
+}
+
+
+// ============================================================
+// Send Message through WebSocket
+// ============================================================
+
+function send(action: any): void {
+    if (
+        ws?.readyState ===
+        WebSocket.OPEN
+    ) {
+        ws.send(
+            JSON.stringify({
+                type: "MESSAGE_SEND",
+
+                roomId: action.payload.roomId,
+
+                content: action.payload.content,
+
+                clientId: action.payload.clientId,
+            })
+        );
+    }
+}
+
+
+// ============================================================
+// Root Saga
+// ============================================================
+
+function* root(): Generator {
+    yield all([
+        takeEvery(
+            "loginRequested",
+            login
+        ),
+
+        takeEvery(
+            "registerRequested",
+            login
+        ),
+
+        takeEvery(
+            "roomsRequested",
+            rooms
+        ),
+
+        takeEvery(
+            chat.actions.roomSelected.type,
+            selectRoom
+        ),
+
+        takeEvery(
+            "connect",
+            connect
+        ),
+
+        takeEvery(
+            "sendMessage",
+            send
+        ),
+    ]);
+}
+
+
+// ============================================================
+// Start Saga
+// ============================================================
+
+sagaMiddleware.run(root);
+
+
+// ============================================================
+// Actions
+// ============================================================
+
+export const actions = {
+    ...auth.actions,
+
+    ...chat.actions,
+
+    loginRequested: (payload: any) => ({
+        type: "loginRequested",
+        payload,
+    }),
+
+    registerRequested: (payload: any) => ({
+        type: "registerRequested",
+        payload,
+    }),
+
+    roomsRequested: () => ({
+        type: "roomsRequested",
+    }),
+
+    sendMessage: (payload: any) => ({
+        type: "sendMessage",
+        payload,
+    }),
+};
