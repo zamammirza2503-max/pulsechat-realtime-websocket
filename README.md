@@ -41,8 +41,3 @@ React UI -> Redux Toolkit -> Redux-Saga -> WebSocket client -> Node WebSocket ga
 
 HTTP REST is used for authentication and message history; WebSockets are used for events that need low-latency delivery.
 
-## Attribution
-Learning reference: freeCodeCamp, “How to Build a Chat Application using React, Redux, Redux-Saga, and Web Sockets”, Flavio Copes.
-https://www.freecodecamp.org/news/how-to-build-a-chat-application-using-react-redux-redux-saga-and-web-sockets-47423e4bc21a
-
-This repository is an original modernization/extension, not a copy of the tutorial source.
