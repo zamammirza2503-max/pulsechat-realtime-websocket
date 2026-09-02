@@ -1,0 +1,1 @@
+import {describe,it,expect} from "vitest"; import {hashPassword,verifyPassword} from "./auth.js"; describe("passwords",()=>it("hashes and verifies",async()=>{const h=await hashPassword("correct-password");expect(h).not.toBe("correct-password");expect(await verifyPassword("correct-password",h)).toBe(true);expect(await verifyPassword("wrong",h)).toBe(false)}));

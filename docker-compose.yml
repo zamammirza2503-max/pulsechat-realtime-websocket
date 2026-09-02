@@ -1,0 +1,12 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat
+      POSTGRES_DB: chat
+    ports: ["5432:5432"]
+    volumes: ["pulsechat_pg:/var/lib/postgresql/data"]
+volumes:
+  pulsechat_pg:
