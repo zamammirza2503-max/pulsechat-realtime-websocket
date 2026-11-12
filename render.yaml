@@ -5,6 +5,7 @@ services:
     name: pulsechat
     runtime: node
     plan: free
+    region: frankfurt
     buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/health
