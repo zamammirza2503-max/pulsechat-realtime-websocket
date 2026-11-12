@@ -19,7 +19,15 @@ import {
 // API
 // ============================================================
 
-const API = "http://localhost:4000";
+// Empty = same origin (production, and dev via the Vite proxy).
+// Set VITE_API_URL only if the API is hosted on a different domain.
+const API: string = import.meta.env.VITE_API_URL ?? "";
+
+function wsUrl(token: string): string {
+    const base = API ? new URL(API) : new URL(window.location.href);
+    const protocol = base.protocol === "https:" ? "wss:" : "ws:";
+    return `${protocol}//${base.host}/ws?token=${encodeURIComponent(token)}`;
+}
 
 
 // ============================================================
@@ -221,7 +229,7 @@ function* login(action: any): Generator {
     try {
         const response: Response = yield call(
             fetch,
-            `${API}/api/auth/${action.type}`,
+            `${API}/api/auth/${action.type === "registerRequested" ? "register" : "login"}`,
             {
                 method: "POST",
 
@@ -326,7 +334,7 @@ function connect(): void {
 
     // Create WebSocket connection
     ws = new WebSocket(
-        `ws://localhost:4000/ws?token=${token}`
+        wsUrl(token)
     );
 
 
