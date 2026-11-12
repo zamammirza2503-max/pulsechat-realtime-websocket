@@ -368,7 +368,7 @@ function connect(): void {
         if (payload.type === "MESSAGE") {
             store.dispatch(
                 chat.actions.messageReceived({
-                       ...payload.message,
+                       payload.message,
                        clientId: payload.clientId,
                    })
                 )
