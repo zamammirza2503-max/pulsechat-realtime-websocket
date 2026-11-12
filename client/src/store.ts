@@ -366,14 +366,13 @@ function connect(): void {
 
         // New message
         if (payload.type === "MESSAGE") {
-            store.dispatch(
-                chat.actions.messageReceived({
-                       payload.message,
+               store.dispatch(
+                   chat.actions.messageReceived({
+                       ...payload.message,
                        clientId: payload.clientId,
                    })
-                )
-            );
-        }
+               );
+           }
 
 
         // Typing notification
