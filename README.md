@@ -21,6 +21,16 @@ Original TypeScript rebuild inspired by the architecture. It keeps React + Redux
 
 Register two users in two browser windows to demonstrate real-time messaging.
 
+## Deploy for free (Render + Neon)
+The whole app runs as **one** free Render web service: Express serves the built React client, the REST API and the `/ws` WebSocket gateway from the same URL. The database is a free Neon Postgres.
+
+1. Create a free project at [neon.tech](https://neon.tech) and copy the connection string (use the direct one, not the `-pooler` host). It looks like `postgresql://user:pass@ep-xxx.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
+2. On [render.com](https://render.com), choose **New → Blueprint** and select this repository. Render reads `render.yaml`.
+3. When asked, paste the Neon string as `DATABASE_URL`. `JWT_SECRET` is generated automatically.
+4. Deploy. Migrations run on start (`prisma migrate deploy`), and the app is live at `https://pulsechat-xxxx.onrender.com`.
+
+On the free tier, the service sleeps after 15 minutes without traffic and takes about a minute to wake up.
+
 ## Portfolio features
 - WebSocket room broadcasting
 - JWT authentication

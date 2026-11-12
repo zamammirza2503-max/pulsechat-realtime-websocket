@@ -1,0 +1,10 @@
+{
+  "name": "pulsechat",
+  "private": true,
+  "description": "Root scripts used for single-service deployment (e.g. Render). Local development still runs client/ and server/ separately.",
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "build": "npm --prefix client ci --include=dev && npm --prefix client run build && npm --prefix server install --include=dev && npm --prefix server run build",
+    "start": "npm --prefix server start"
+  }
+}
